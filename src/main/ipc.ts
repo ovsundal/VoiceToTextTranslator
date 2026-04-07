@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { listModels, downloadModel } from './modelManager'
+import { transcribe } from './transcriber'
 import type { ModelSize } from '../types/models'
 
 export function registerIpcHandlers(win: BrowserWindow): void {
@@ -16,8 +17,13 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     }).catch(console.error)
   })
 
-  // TODO Phase 3: transcribe handler
-  // ipcMain.handle('transcribe', async (_, wavPath: string, language: string) => { ... })
+  // Transcription
+  ipcMain.handle('transcribe', async (_, wavBuffer: ArrayBuffer, language: string, modelSize: string) => {
+    const models = listModels()
+    const model = models.find(m => m.size === modelSize && m.downloaded)
+    if (!model?.path) throw new Error(`Model '${modelSize}' not found or not downloaded`)
+    return transcribe(Buffer.from(wavBuffer), model.path, language as 'en' | 'no')
+  })
 
   // TODO Phase 4: clipboard
   // ipcMain.handle('copyToClipboard', (_, text: string) => { clipboard.writeText(text) })

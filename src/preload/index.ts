@@ -22,9 +22,9 @@ const api = {
     return () => { ipcRenderer.removeListener('download-progress', handler) }
   },
 
-  // TODO Phase 3: transcription
-  // transcribe: (wavPath: string, language: 'en' | 'no'): Promise<string> =>
-  //   ipcRenderer.invoke('transcribe', wavPath, language),
+  // Transcription
+  transcribe: (wavBuffer: ArrayBuffer, language: 'en' | 'no', modelSize: string): Promise<string> =>
+    ipcRenderer.invoke('transcribe', wavBuffer, language, modelSize),
 
   // TODO Phase 4: hotkey
   // onHotkeyPressed: (cb: () => void) => { ... },

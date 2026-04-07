@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import ModelSetup from './components/ModelSetup'
+import RecordingWidget from './components/RecordingWidget'
 
 type Theme = 'dark' | 'light'
 type AppState = 'loading' | 'setup' | 'ready'
@@ -54,11 +55,7 @@ export default function App() {
         {appState === 'setup' && (
           <ModelSetup onComplete={() => setAppState('ready')} />
         )}
-        {appState === 'ready' && (
-          <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-            Phase 2 complete — model ready. Recording UI coming in Phase 3.
-          </p>
-        )}
+        {appState === 'ready' && <RecordingWidget />}
       </div>
     </>
   )
