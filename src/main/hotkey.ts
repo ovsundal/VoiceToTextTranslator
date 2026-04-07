@@ -1,28 +1,16 @@
-import { UiohookKey, uIOhook } from 'uiohook-napi'
+import { globalShortcut } from 'electron'
 import type { BrowserWindow } from 'electron'
 
-let started = false
-
 export function registerHotkey(win: BrowserWindow): () => void {
-  uIOhook.on('keydown', (e) => {
-    if (e.keycode === UiohookKey.Space && e.ctrlKey && e.shiftKey) {
-      win.webContents.send('hotkey-pressed')
-    }
+  const registered = globalShortcut.register('CommandOrControl+Shift+Space', () => {
+    win.webContents.send('hotkey-toggle')
   })
 
-  uIOhook.on('keyup', (e) => {
-    if (e.keycode === UiohookKey.Space) {
-      win.webContents.send('hotkey-released')
-    }
-  })
-
-  if (!started) {
-    uIOhook.start()
-    started = true
+  if (!registered) {
+    console.error('Failed to register global hotkey Ctrl+Shift+Space — may be in use by another app')
   }
 
   return () => {
-    uIOhook.stop()
-    started = false
+    globalShortcut.unregister('CommandOrControl+Shift+Space')
   }
 }

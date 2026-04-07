@@ -40,7 +40,7 @@ export default function App() {
   return (
     <>
       <div className="titlebar">
-        <span className="titlebar-title">VoiceToText</span>
+        <span className="titlebar-title">Voice-to-Text-Transcriber</span>
         <div className="titlebar-controls">
           <button onClick={toggleTheme} title="Toggle theme">
             {theme === 'dark' ? '☀️' : '🌙'}

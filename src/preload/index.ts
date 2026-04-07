@@ -26,12 +26,18 @@ const api = {
   transcribe: (wavBuffer: ArrayBuffer, language: 'en' | 'no', modelSize: string): Promise<string> =>
     ipcRenderer.invoke('transcribe', wavBuffer, language, modelSize),
 
-  // TODO Phase 4: hotkey
-  // onHotkeyPressed: (cb: () => void) => { ... },
-  // onHotkeyReleased: (cb: () => void) => { ... },
+  // Hotkey
+  onHotkeyToggle: (cb: () => void): (() => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('hotkey-toggle', handler)
+    return () => { ipcRenderer.removeListener('hotkey-toggle', handler) }
+  },
 
-  // TODO Phase 4: clipboard
-  // copyToClipboard: (text: string): void => ipcRenderer.send('copyToClipboard', text),
+  // Clipboard
+  copyToClipboard: (text: string): void => ipcRenderer.send('copyToClipboard', text),
+
+  // Taskbar overlay
+  setOverlay: (isRecording: boolean): void => ipcRenderer.send('set-overlay', isRecording),
 }
 
 contextBridge.exposeInMainWorld('api', api)

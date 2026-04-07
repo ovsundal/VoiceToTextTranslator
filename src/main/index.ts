@@ -1,11 +1,12 @@
 import { app, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
+import { registerHotkey } from './hotkey'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 340,
-    height: 280,
+    height: 320,
     resizable: false,
     frame: false,
     show: false,
@@ -36,6 +37,7 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
   const mainWindow = createWindow()
   registerIpcHandlers(mainWindow)
+  registerHotkey(mainWindow)
 
   nativeTheme.on('updated', () => {
     const theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'

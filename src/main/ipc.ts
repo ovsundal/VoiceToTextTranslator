@@ -1,7 +1,10 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, clipboard, nativeImage } from 'electron'
 import { listModels, downloadModel } from './modelManager'
 import { transcribe } from './transcriber'
 import type { ModelSize } from '../types/models'
+
+const REC_DOT_B64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAK0lEQVR42mNgGJTgc/eK/9gw2RqJNogiA4jVjNOQUQOoYMDApwOqJOUBAQAqGoX8qw36TwAAAABJRU5ErkJggg=='
+const recDotIcon = nativeImage.createFromDataURL(`data:image/png;base64,${REC_DOT_B64}`)
 
 export function registerIpcHandlers(win: BrowserWindow): void {
   // Titlebar controls
@@ -25,6 +28,11 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     return transcribe(Buffer.from(wavBuffer), model.path, language as 'en' | 'no')
   })
 
-  // TODO Phase 4: clipboard
-  // ipcMain.handle('copyToClipboard', (_, text: string) => { clipboard.writeText(text) })
+  // Clipboard
+  ipcMain.on('copyToClipboard', (_, text: string) => { clipboard.writeText(text) })
+
+  // Taskbar overlay
+  ipcMain.on('set-overlay', (_, isRecording: boolean) => {
+    win.setOverlayIcon(isRecording ? recDotIcon : null, isRecording ? 'Recording' : '')
+  })
 }

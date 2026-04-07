@@ -6,32 +6,32 @@ Pay special attention to naming of existing types, hooks, and IPC channels. Impo
 
 ## Feature Description
 
-Wire up the global hotkey (`Ctrl+Shift+Space`) in push-to-talk mode (hold to record, release to transcribe), implement the clipboard copy flow (icon-only button + auto-copy toggle), and surface copy UI in the recording widget. Push-to-talk is always active — there is no mode toggle in the UI. A static hotkey hint tells the user how to record.
+Wire up the global hotkey (`Ctrl+Shift+Space`) as a click-to-toggle — same as the Record button. Implement the clipboard copy flow: icon-only clipboard button that copies on click, and an auto-copy toggle that is **ON by default**. The auto-copy label sits right next to the switch, both right-aligned in the actions row. A static hotkey hint is always visible below the actions row.
 
 ## User Story
 
 As a user
-I want to hold `Ctrl+Shift+Space` to record and release to transcribe, then click the clipboard icon to copy the result
-So that I can dictate text hands-free into any application without a mode picker cluttering the UI
+I want to press `Ctrl+Shift+Space` to toggle recording on/off (same as clicking the Record button), and have transcriptions auto-copied to clipboard by default
+So that I can dictate text into any application without touching the app window
 
 ## Problem Statement
 
-After Phase 3, the app can record and transcribe, but there is no way to copy the result, no global hotkey, and the Record button only supports click-to-toggle. The widget needs a clipboard copy button and hotkey support wired up.
+After Phase 3, the app can record and transcribe but has no global hotkey and no way to copy the result to clipboard. The widget needs hotkey support and clipboard integration.
 
 ## Solution Statement
 
-- Create `src/main/hotkey.ts` using `uiohook-napi` to detect keydown/keyup of `Ctrl+Shift+Space` globally and forward to the renderer via IPC.
-- Add a `copyToClipboard` IPC handler and a `set-overlay` overlay handler.
-- Expose `onHotkeyPressed`, `onHotkeyReleased`, `copyToClipboard`, `setOverlay` in the preload contextBridge.
-- Refactor `useRecorder` to extract `startRecording` / `stopAndTranscribe` helpers, add `autoCopy` state, and subscribe to hotkey IPC. **No `recordingMode` state** — push-to-talk is always the behavior.
-- Update `RecordingWidget`: Record button uses `onMouseDown`/`onMouseUp` (PTT always); add clipboard icon-only button; add auto-copy toggle; show static hotkey hint text. **No PTT toggle switch in the UI.**
+- Rewrite `src/main/hotkey.ts` to use Electron's built-in `globalShortcut` (keydown toggle only — no PTT, no native uiohook-napi needed).
+- Add a `copyToClipboard` IPC handler and `set-overlay` overlay handler in `src/main/ipc.ts`.
+- Expose `onHotkeyToggle`, `copyToClipboard`, `setOverlay` in the preload contextBridge.
+- Update `useRecorder`: keep `toggleRecording` as-is, subscribe to `onHotkeyToggle`, add `autoCopy` state defaulting to `true`.
+- Update `RecordingWidget`: Record button stays `onClick={toggleRecording}`; add clipboard icon-only button; add auto-copy toggle (label right next to switch, both right-aligned); show static hotkey hint.
 
 ## Feature Metadata
 
 **Feature Type**: Enhancement
-**Estimated Complexity**: Medium
-**Primary Systems Affected**: `src/main/hotkey.ts` (new), `src/main/ipc.ts`, `src/preload/index.ts`, `src/renderer/hooks/useRecorder.ts`, `src/renderer/components/RecordingWidget.tsx`, `src/renderer/styles.css`, `src/main/index.ts`, `package.json`, `electron-builder.yml`
-**Dependencies**: `uiohook-napi` (new npm dependency — native global key listener for Windows)
+**Estimated Complexity**: Low-Medium
+**Primary Systems Affected**: `src/main/hotkey.ts`, `src/main/ipc.ts`, `src/preload/index.ts`, `src/renderer/hooks/useRecorder.ts`, `src/renderer/components/RecordingWidget.tsx`, `src/renderer/styles.css`, `src/main/index.ts`, `package.json`, `electron-builder.yml`
+**Dependencies**: None new — uses Electron's built-in `globalShortcut`
 
 ---
 
@@ -39,15 +39,16 @@ After Phase 3, the app can record and transcribe, but there is no way to copy th
 
 ### Relevant Codebase Files — MUST READ BEFORE IMPLEMENTING
 
-- `src/main/ipc.ts` — Pattern for all IPC handlers; clipboard TODO at bottom shows expected shape
-- `src/preload/index.ts` (lines 10–13) — `onThemeChanged` listener pattern to mirror for hotkey events; TODO stubs at lines 29–34
-- `src/renderer/hooks/useRecorder.ts` (lines 32–58) — `toggleRecording` to refactor into `startRecording` / `stopAndTranscribe`
+- `src/main/hotkey.ts` — Already committed stub using uiohook-napi; **must be rewritten** to use `Electron.globalShortcut` (see task below)
+- `src/main/ipc.ts` — Pattern for all IPC handlers; clipboard TODO comments show expected shape
+- `src/preload/index.ts` (lines 10–13) — `onThemeChanged` listener pattern to mirror for `onHotkeyToggle`; TODO stubs at lines 29–34
+- `src/renderer/hooks/useRecorder.ts` (lines 32–58) — `toggleRecording` stays; add `autoCopy` state and hotkey subscription
 - `src/renderer/components/RecordingWidget.tsx` — UI to extend with clipboard button, auto-copy toggle, hotkey hint
 - `src/renderer/styles.css` (lines 250–291) — Widget CSS classes to extend
 
 ### New Files to Create
 
-- `src/main/hotkey.ts` — Global key listener using uiohook-napi; emits `hotkey-pressed` / `hotkey-released` to renderer
+None — all changes are to existing files.
 
 ### Patterns to Follow
 
@@ -55,7 +56,7 @@ After Phase 3, the app can record and transcribe, but there is no way to copy th
 - `ipcMain.handle` for async request/response: `'listModels'`, `'transcribe'`
 - `ipcMain.on` for fire-and-forget: `'minimize'`, `'close'`, `'downloadModel'`
 - `win.webContents.send` for push events main → renderer: `'download-progress'`, `'theme-changed'`
-- New channels: `'hotkey-pressed'`, `'hotkey-released'` (push from main), `'copyToClipboard'`, `'set-overlay'` (fire-and-forget from renderer)
+- New channel: `'hotkey-toggle'` (push from main), `'copyToClipboard'`, `'set-overlay'` (fire-and-forget from renderer)
 
 **contextBridge listener pattern** (from `preload/index.ts` lines 10–13):
 ```typescript
@@ -65,7 +66,7 @@ onThemeChanged: (cb: (theme: 'dark' | 'light') => void): (() => void) => {
   return () => { ipcRenderer.removeListener('theme-changed', handler) }
 },
 ```
-Mirror this exact pattern for `onHotkeyPressed` and `onHotkeyReleased` (no payload — `cb: () => void`).
+Mirror this exact pattern for `onHotkeyToggle` (no payload — `cb: () => void`).
 
 **React hook pattern** (from `useRecorder.ts`):
 - State with `useState`, refs with `useRef`, memoized callbacks with `useCallback`
@@ -75,21 +76,17 @@ Mirror this exact pattern for `onHotkeyPressed` and `onHotkeyReleased` (no paylo
 
 ## IMPLEMENTATION PLAN
 
-### Phase 1: Install Dependency & Create Hotkey Module
+### Phase 1: Main Process — Hotkey, IPC, Preload
 
-Install `uiohook-napi` and create the main-process hotkey module.
+Rewrite `hotkey.ts` to use `globalShortcut`. Wire clipboard and overlay into IPC. Expose to renderer via preload.
 
-### Phase 2: Main Process IPC & Preload
+### Phase 2: Renderer Logic
 
-Wire clipboard and hotkey into the IPC layer and expose via contextBridge.
+Add `autoCopy` state (default `true`) and hotkey subscription to `useRecorder`. Keep `toggleRecording` unchanged.
 
-### Phase 3: Renderer Logic
+### Phase 3: UI Components & Styles
 
-Refactor `useRecorder` to extract `startRecording`/`stopAndTranscribe`, add `autoCopy`, subscribe to hotkey IPC. No `recordingMode` — PTT is always active.
-
-### Phase 4: UI Components & Styles
-
-Update `RecordingWidget` with PTT button handlers, clipboard icon button, auto-copy toggle, and static hotkey hint.
+Update `RecordingWidget` with clipboard button, auto-copy toggle (label right-aligned next to switch), and static hotkey hint.
 
 ---
 
@@ -100,59 +97,35 @@ Update `RecordingWidget` with PTT button handlers, clipboard icon button, auto-c
 - **UPDATE** `package.json` — change `"name"` to `"voice-to-text-transcriber"`, add `"productName": "Voice-to-Text-Transcriber"`
 - **UPDATE** `electron-builder.yml` — set `productName: Voice-to-Text-Transcriber`
 - **UPDATE** `src/renderer/App.tsx` — change titlebar text to `Voice-to-Text-Transcriber`
-- **GOTCHA**: `name` in package.json must be lowercase with hyphens (npm convention). `productName` is the human-readable display name.
+- **GOTCHA**: `name` in package.json must be lowercase with hyphens. `productName` is the human-readable display name shown in the installer and Start Menu.
 - **VALIDATE**: `npm run dev` — titlebar shows "Voice-to-Text-Transcriber"
 
 ---
 
-### INSTALL uiohook-napi
+### REWRITE `src/main/hotkey.ts`
 
-- **IMPLEMENT**: `npm install uiohook-napi` — native Windows key listener that fires both keydown and keyup events globally
-- **GOTCHA**: Must be in `dependencies` (not `devDependencies`) so electron-builder includes it.
-- **GOTCHA**: In packaged Electron apps, native modules must be unpacked from asar. Add `"asarUnpack": ["**/uiohook-napi/**"]` to `electron-builder.yml`.
-- **VALIDATE**: `npm ls uiohook-napi` — shows version without errors
+The committed stub uses `uiohook-napi` which was designed for PTT (keyup events). Since the hotkey is now toggle-only, replace it entirely with Electron's built-in `globalShortcut`.
 
----
+- **REMOVE**: All `uiohook-napi` imports and logic
+- **IMPLEMENT**:
+  ```typescript
+  import { globalShortcut } from 'electron'
+  import type { BrowserWindow } from 'electron'
 
-### CREATE `src/main/hotkey.ts`
+  export function registerHotkey(win: BrowserWindow): () => void {
+    globalShortcut.register('CommandOrControl+Shift+Space', () => {
+      win.webContents.send('hotkey-toggle')
+    })
 
-- **IMPLEMENT**: Import `uIOhook` and `UiohookKey` from `uiohook-napi`. On keydown `Ctrl+Shift+Space`, send `'hotkey-pressed'` to renderer. On keyup `Space`, send `'hotkey-released'`. Return a cleanup function that stops uIOhook.
-- **PATTERN**: `src/main/ipc.ts` — function takes `win: BrowserWindow` as parameter
-- **GOTCHA**: `uIOhook` is a singleton — only call `uIOhook.start()` once using a `started` guard. Return cleanup that calls `uIOhook.stop()`.
-- **GOTCHA**: On keyup, check only `e.keycode === UiohookKey.Space` — modifier key states (ctrlKey/shiftKey) are unreliable on keyup. Only check modifiers on keydown.
-
-```typescript
-import { UiohookKey, uIOhook } from 'uiohook-napi'
-import type { BrowserWindow } from 'electron'
-
-let started = false
-
-export function registerHotkey(win: BrowserWindow): () => void {
-  uIOhook.on('keydown', (e) => {
-    if (e.keycode === UiohookKey.Space && e.ctrlKey && e.shiftKey) {
-      win.webContents.send('hotkey-pressed')
+    return () => {
+      globalShortcut.unregister('CommandOrControl+Shift+Space')
     }
-  })
-
-  uIOhook.on('keyup', (e) => {
-    if (e.keycode === UiohookKey.Space) {
-      win.webContents.send('hotkey-released')
-    }
-  })
-
-  if (!started) {
-    uIOhook.start()
-    started = true
   }
-
-  return () => {
-    uIOhook.stop()
-    started = false
-  }
-}
-```
-
-- **VALIDATE**: `npm run build` — no TypeScript errors
+  ```
+- **GOTCHA**: `globalShortcut` must be called after `app.whenReady()` — it is, because `registerHotkey` is called from inside `app.whenReady()` in `index.ts`.
+- **GOTCHA**: `CommandOrControl` in Electron's shortcut string maps to `Ctrl` on Windows.
+- **GOTCHA**: `uiohook-napi` is still listed in `package.json` from a previous session. Remove it: `npm uninstall uiohook-napi`. Also remove the `asarUnpack` entry for it from `electron-builder.yml` if present.
+- **VALIDATE**: `npm run build` — no TypeScript errors; `npm ls uiohook-napi` — not listed
 
 ---
 
@@ -172,25 +145,19 @@ export function registerHotkey(win: BrowserWindow): () => void {
   })
   ```
 - **REMOVE**: The `// TODO Phase 4` comment blocks
-- **GOTCHA**: `win.setOverlayIcon(null, '')` clears the overlay — pass `null` (not the icon) to clear
+- **GOTCHA**: `win.setOverlayIcon(null, '')` clears the overlay — pass `null` to clear, not the icon
 - **VALIDATE**: `npm run build` — no TypeScript errors
 
 ---
 
 ### UPDATE `src/preload/index.ts`
 
-- **ADD** to the `api` object:
+- **ADD** to the `api` object — one hotkey listener, clipboard, and overlay:
   ```typescript
-  onHotkeyPressed: (cb: () => void): (() => void) => {
+  onHotkeyToggle: (cb: () => void): (() => void) => {
     const handler = () => cb()
-    ipcRenderer.on('hotkey-pressed', handler)
-    return () => { ipcRenderer.removeListener('hotkey-pressed', handler) }
-  },
-
-  onHotkeyReleased: (cb: () => void): (() => void) => {
-    const handler = () => cb()
-    ipcRenderer.on('hotkey-released', handler)
-    return () => { ipcRenderer.removeListener('hotkey-released', handler) }
+    ipcRenderer.on('hotkey-toggle', handler)
+    return () => { ipcRenderer.removeListener('hotkey-toggle', handler) }
   },
 
   copyToClipboard: (text: string): void => ipcRenderer.send('copyToClipboard', text),
@@ -198,8 +165,8 @@ export function registerHotkey(win: BrowserWindow): () => void {
   setOverlay: (isRecording: boolean): void => ipcRenderer.send('set-overlay', isRecording),
   ```
 - **REMOVE**: The `// TODO Phase 4` comment blocks (lines 29–34)
-- **PATTERN**: `src/preload/index.ts:10–13` — use the `onThemeChanged` pattern for hotkey listeners
-- **VALIDATE**: `npm run build` — `ElectronAPI` type must include the four new members
+- **PATTERN**: `src/preload/index.ts:10–13` — `onHotkeyToggle` mirrors `onThemeChanged` exactly (no payload, just `cb: () => void`)
+- **VALIDATE**: `npm run build` — `ElectronAPI` type must include the three new members
 
 ---
 
@@ -207,53 +174,21 @@ export function registerHotkey(win: BrowserWindow): () => void {
 
 - **ADD**: `import { registerHotkey } from './hotkey'`
 - **ADD**: Call `registerHotkey(mainWindow)` immediately after `registerIpcHandlers(mainWindow)` inside `app.whenReady()`
-- **VALIDATE**: `npm run dev` — app launches without errors
+- **PATTERN**: Mirror the `registerIpcHandlers` call style
+- **VALIDATE**: `npm run dev` — app launches; pressing `Ctrl+Shift+Space` triggers no console errors
 
 ---
 
-### REFACTOR `src/renderer/hooks/useRecorder.ts`
+### UPDATE `src/renderer/hooks/useRecorder.ts`
 
-Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `autoCopy`. Subscribe to hotkey IPC. **No `recordingMode` state** — PTT is always the mode.
+Keep `toggleRecording` unchanged. Add `autoCopy` (default `true`), auto-copy effect, and hotkey subscription.
 
-- **ADD** state:
+- **ADD** state — after the existing state declarations:
   ```typescript
-  const [autoCopy, setAutoCopy] = useState(false)
+  const [autoCopy, setAutoCopy] = useState(true)
   ```
 
-- **REFACTOR**: Extract `startRecording` and `stopAndTranscribe` as `useCallback` functions (content comes from the two branches of the existing `toggleRecording`):
-  ```typescript
-  const startRecording = useCallback(async () => {
-    setError(null)
-    try {
-      const controls = await recordAudio()
-      recorderRef.current = controls
-      controls.start()
-      setStatus('recording')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start recording')
-      setStatus('error')
-    }
-  }, [])
-
-  const stopAndTranscribe = useCallback(async () => {
-    if (!recorderRef.current) return
-    setStatus('transcribing')
-    try {
-      const wavBuffer = await recorderRef.current.stop()
-      recorderRef.current = null
-      const text = await window.api.transcribe(wavBuffer, selectedLanguage, selectedModelSize)
-      setTranscript(text)
-      setStatus('idle')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Transcription failed')
-      setStatus('error')
-    }
-  }, [selectedLanguage, selectedModelSize])
-  ```
-
-- **REMOVE**: `toggleRecording` — no longer needed. PTT is the only mode; the button and hotkey both use `startRecording`/`stopAndTranscribe` directly.
-
-- **ADD**: Auto-copy effect:
+- **ADD** auto-copy effect — runs when transcript or autoCopy changes:
   ```typescript
   useEffect(() => {
     if (transcript && autoCopy) {
@@ -262,24 +197,18 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
   }, [transcript, autoCopy])
   ```
 
-- **ADD**: Hotkey subscription effect — PTT always (no mode check):
+- **ADD** hotkey subscription effect:
   ```typescript
   useEffect(() => {
-    const cleanupPressed = window.api.onHotkeyPressed(() => {
-      startRecording()
+    const cleanup = window.api.onHotkeyToggle(() => {
+      toggleRecording()
     })
-    const cleanupReleased = window.api.onHotkeyReleased(() => {
-      stopAndTranscribe()
-    })
-    return () => {
-      cleanupPressed()
-      cleanupReleased()
-    }
-  }, [startRecording, stopAndTranscribe])
+    return cleanup
+  }, [toggleRecording])
   ```
-  **GOTCHA**: `startRecording` and `stopAndTranscribe` must be stable `useCallback` references for this effect to not re-subscribe every render.
+  **GOTCHA**: `toggleRecording` is a `useCallback` with `[status, selectedLanguage, selectedModelSize]` deps. The effect re-subscribes when `toggleRecording` changes, which is correct — it ensures the hotkey always calls the latest version of the function.
 
-- **UPDATE**: Return value:
+- **UPDATE** return value — add `autoCopy`/`setAutoCopy`:
   ```typescript
   return {
     status,
@@ -290,10 +219,9 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
     selectedModelSize,
     setSelectedModelSize,
     downloadedModels,
+    toggleRecording,
     autoCopy,
     setAutoCopy,
-    startRecording,
-    stopAndTranscribe,
   }
   ```
 
@@ -303,7 +231,7 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
 
 ### UPDATE `src/renderer/components/RecordingWidget.tsx`
 
-- **UPDATE** destructuring from `useRecorder()`:
+- **UPDATE** destructuring from `useRecorder()` — add `autoCopy`, `setAutoCopy`:
   ```typescript
   const {
     status,
@@ -314,14 +242,13 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
     selectedModelSize,
     setSelectedModelSize,
     downloadedModels,
+    toggleRecording,
     autoCopy,
     setAutoCopy,
-    startRecording,
-    stopAndTranscribe,
   } = useRecorder()
   ```
 
-- **ADD**: `isRecording` derived value and taskbar overlay effect:
+- **ADD** `isRecording` derived value and taskbar overlay effect:
   ```typescript
   const isRecording = status === 'recording'
 
@@ -334,29 +261,28 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
     }
   }, [isRecording])
   ```
+  **GOTCHA**: Cleanup must call `setOverlay(false)` to clear the overlay if the component unmounts while recording.
 
-- **ADD**: Copy handler:
+- **ADD** copy handler:
   ```typescript
   function handleCopy() {
     if (transcript) window.api.copyToClipboard(transcript)
   }
   ```
 
-- **UPDATE**: Record button — always PTT (mousedown/mouseup), no click handler:
+- **KEEP** Record button unchanged — click-to-toggle, same as phase 3:
   ```tsx
   <button
-    className={`btn-primary${isRecording ? ' recording' : ''}`}
-    onMouseDown={startRecording}
-    onMouseUp={stopAndTranscribe}
-    onMouseLeave={isRecording ? stopAndTranscribe : undefined}
+    className="btn-primary"
+    onClick={toggleRecording}
     disabled={status === 'transcribing'}
-    style={isRecording ? { background: 'var(--accent-danger)', userSelect: 'none' } : { userSelect: 'none' }}
+    style={isRecording ? { background: 'var(--accent-danger)' } : undefined}
   >
-    {status === 'transcribing' ? '⏳ Transcribing...' : isRecording ? '⏹ Release to stop' : '⏺ Hold to record'}
+    {status === 'transcribing' ? '⏳ Transcribing...' : isRecording ? '⏹ Stop' : '⏺ Record'}
   </button>
   ```
 
-- **ADD**: Below the Record button — clipboard icon button, auto-copy toggle row, and static hotkey hint:
+- **ADD** below the Record button — actions row (clipboard icon + auto-copy) and hotkey hint:
   ```tsx
   <div className="widget-actions">
     <button
@@ -371,7 +297,7 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
       </svg>
     </button>
 
-    <label className="switch-row">
+    <label className="auto-copy-label">
       <span>Auto-copy</span>
       <label className="switch">
         <input
@@ -384,10 +310,10 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
     </label>
   </div>
 
-  <p className="hotkey-hint">Hold Ctrl+Shift+Space to record</p>
+  <p className="hotkey-hint">Press Ctrl+Shift+Space to toggle recording</p>
   ```
+  The `.widget-actions` row is `space-between`: clipboard icon anchored left, auto-copy label+switch group anchored right. The label text sits immediately left of the switch with a small gap — no wide space between them.
 
-- **REMOVE**: Any leftover `toggleRecording` references or `recordingMode` / `setRecordingMode` usage
 - **VALIDATE**: `npm run build` — no TypeScript errors
 
 ---
@@ -422,31 +348,30 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
   }
   ```
 
-- **ADD** `.widget-actions` — row containing the clipboard button and auto-copy toggle:
+- **ADD** `.widget-actions` — clipboard icon anchored left, auto-copy group anchored right:
   ```css
   .widget-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
-  }
-
-  .widget-actions .switch-row {
-    flex: 1;
+    justify-content: space-between;
   }
   ```
 
-- **ADD** toggle switch CSS (shared, used by auto-copy):
+- **ADD** `.auto-copy-label` — label text immediately left of the switch, both right-aligned as a unit:
   ```css
-  .switch-row {
+  .auto-copy-label {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
     font-size: 12px;
     color: var(--text-secondary);
     user-select: none;
     cursor: pointer;
   }
+  ```
 
+- **ADD** toggle switch CSS:
+  ```css
   .switch {
     position: relative;
     display: inline-block;
@@ -502,19 +427,14 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
   }
   ```
 
-- **VALIDATE**: Visual check — clipboard icon button is 28×28px square; auto-copy switch animates; hotkey hint is visible in both themes
+- **VALIDATE**: Visual check — clipboard button is 28×28px; "Auto-copy" label and switch are a tight pair on the right; switch is ON by default (accent color); hotkey hint is centered below the actions row
 
 ---
 
 ### UPDATE `electron-builder.yml`
 
-- **ADD**:
-  ```yaml
-  asarUnpack:
-    - "node_modules/uiohook-napi/**"
-  ```
-- **GOTCHA**: Without this, the packaged app cannot load the native `.node` file from inside the asar archive.
-- **VALIDATE**: `npm run package` — check that `node_modules/uiohook-napi` appears unpacked in `dist/win-unpacked/resources/`
+- **REMOVE**: `asarUnpack` entry for `uiohook-napi` if it exists (no longer needed — `globalShortcut` is built into Electron)
+- **VALIDATE**: `npm run build` — no errors
 
 ---
 
@@ -522,31 +442,40 @@ Extract `startRecording` / `stopAndTranscribe` from `toggleRecording`. Add `auto
 
 ### Manual Validation (no automated test infrastructure exists)
 
-**Default behavior (PTT always active):**
-1. Launch app — no PTT toggle switch visible anywhere in the UI
-2. Hold the Record button → status shows recording (red), label shows "Release to stop"
-3. Release the Record button → transcribes; text appears in textarea
-4. Hold `Ctrl+Shift+Space` → recording starts; release → transcribes
-5. Hotkey works when the app window is **not** focused (global shortcut)
+**Record button (click-to-toggle):**
+1. Click Record → button turns red, status shows recording
+2. Click Stop → transcription runs, text appears in textarea
+3. Button label: "⏺ Record" → "⏹ Stop" → "⏳ Transcribing..." → "⏺ Record"
+
+**Global hotkey (toggle):**
+1. Press `Ctrl+Shift+Space` → recording starts (same as clicking Record)
+2. Press `Ctrl+Shift+Space` again → stops and transcribes
+3. Hotkey works when app window is **not** focused (minimized or behind other windows)
 
 **Clipboard:**
-1. After transcription, clipboard icon button is enabled; click it → text is in clipboard (paste to notepad to verify)
-2. Before transcription (empty textarea) → clipboard button is disabled (grayed out, 40% opacity)
-3. Hover clipboard button → tooltip reads "Copy to clipboard"
-4. Enable "Auto-copy" switch → after next transcription, text auto-pastes without clicking the icon button
+1. Auto-copy is ON by default (switch shows accent/ON state on first launch)
+2. After transcription completes → text is auto-pasted to clipboard (verify by pasting into Notepad)
+3. Turn off auto-copy → transcription completes, clipboard is not updated automatically
+4. Click clipboard icon button → text copied; hover shows "Copy to clipboard" tooltip
+5. Before any transcription → clipboard icon button is disabled (40% opacity)
 
 **Hotkey hint:**
-1. Static text "Hold Ctrl+Shift+Space to record" is always visible below the actions row
+1. Text "Press Ctrl+Shift+Space to toggle recording" is always visible below the actions row
+
+**Layout check:**
+1. Clipboard icon button is on the left of the actions row
+2. "Auto-copy" label and switch are a tight group on the right — no wide space between the label text and the switch
+3. Both light and dark themes: all elements visible and correct colors
 
 **Taskbar overlay:**
 1. Start recording → red dot badge appears on the taskbar button
-2. Minimize the window → red dot badge still visible
-3. Stop → red dot clears
+2. Minimize window → red dot still visible
+3. Stop recording → red dot clears
 
 **Edge cases:**
-- Rapid mousedown/mouseup: only one recording session triggered
-- Mouse leaves button while recording → recording stops (onMouseLeave guard)
-- No transcript: clipboard icon disabled
+- Rapid clicks during transcribing → button disabled, no double-trigger
+- Empty transcript → clipboard icon disabled; auto-copy does not fire (guard: `if (transcript && autoCopy)`)
+- Hotkey pressed while transcribing → `toggleRecording` is a no-op (status check inside the function)
 
 ---
 
@@ -562,7 +491,7 @@ Expected: exits 0, no errors in any modified file
 ```bash
 npm run dev
 ```
-Expected: Electron app launches, no console errors on startup
+Expected: Electron app launches, no console errors on startup, auto-copy switch is ON by default
 
 ### Level 3: Manual Feature Testing
 Follow manual validation steps above in the running `npm run dev` session.
@@ -571,22 +500,24 @@ Follow manual validation steps above in the running `npm run dev` session.
 ```bash
 npm run package
 ```
-Expected: NSIS installer built to `dist/`; `dist/win-unpacked/resources/` contains unpacked `node_modules/uiohook-napi/`
+Expected: NSIS installer built to `dist/`. No `uiohook-napi` directory in `dist/win-unpacked/resources/node_modules/`.
 
 ---
 
 ## ACCEPTANCE CRITERIA
 
-- [ ] No push-to-talk toggle switch exists in the UI
-- [ ] Record button uses `onMouseDown`/`onMouseUp` (hold-to-record always); label reads "Hold to record" / "Release to stop"
-- [ ] `Ctrl+Shift+Space` hold starts recording; release stops and transcribes (works when app is not focused)
-- [ ] Hotkey hint "Hold Ctrl+Shift+Space to record" is always visible below the actions row
-- [ ] Clipboard icon button (SVG, no text) copies transcript to clipboard; disabled when transcript is empty; tooltip reads "Copy to clipboard"
-- [ ] "Auto-copy" toggle switch: when ON, transcript is auto-written to clipboard on completion
-- [ ] Auto-copy switch animates correctly (thumb slides, track turns accent color when ON)
+- [ ] Record button is click-to-toggle (`onClick={toggleRecording}`); no mousedown/mouseup handlers
+- [ ] `Ctrl+Shift+Space` toggles recording on/off — same behavior as clicking the Record button
+- [ ] Hotkey works when the app window is not focused
+- [ ] Hotkey hint "Press Ctrl+Shift+Space to toggle recording" is always visible
+- [ ] Clipboard icon button (SVG, no text) copies transcript; disabled when empty; tooltip "Copy to clipboard"
+- [ ] Auto-copy toggle is **ON by default** on first launch
+- [ ] Auto-copy label sits immediately to the left of the switch; both are right-aligned in the actions row
+- [ ] Auto-copy: when ON, transcript is auto-written to clipboard after each transcription
+- [ ] Auto-copy switch animates (thumb slides, track turns accent color when ON)
 - [ ] Red dot overlay appears on taskbar while recording; clears on completion
-- [ ] Red dot visible when window is minimized during recording
-- [ ] App name shows as "Voice-to-Text-Transcriber" in titlebar, installer, and Start Menu
+- [ ] App name shows as "Voice-to-Text-Transcriber" in titlebar
+- [ ] `uiohook-napi` is removed from dependencies
 - [ ] `npm run build` exits with zero TypeScript errors
 - [ ] Both light and dark themes display new UI elements correctly
 
@@ -596,15 +527,14 @@ Expected: NSIS installer built to `dist/`; `dist/win-unpacked/resources/` contai
 
 - [ ] `package.json` and `electron-builder.yml` updated with "Voice-to-Text-Transcriber"
 - [ ] `src/renderer/App.tsx` titlebar updated
-- [ ] `uiohook-napi` installed in `dependencies`
-- [ ] `electron-builder.yml` has `asarUnpack` for uiohook-napi
-- [ ] `src/main/hotkey.ts` created
+- [ ] `uiohook-napi` uninstalled (`npm uninstall uiohook-napi`); removed from `electron-builder.yml` asarUnpack if present
+- [ ] `src/main/hotkey.ts` rewritten to use `globalShortcut`, emitting `'hotkey-toggle'`
 - [ ] `src/main/ipc.ts` updated (clipboard + overlay handlers, TODOs removed)
-- [ ] `src/preload/index.ts` updated (4 new API members; TODOs removed)
+- [ ] `src/preload/index.ts` updated (`onHotkeyToggle`, `copyToClipboard`, `setOverlay`; TODOs removed)
 - [ ] `src/main/index.ts` updated (`registerHotkey` called)
-- [ ] `src/renderer/hooks/useRecorder.ts` refactored — `startRecording`/`stopAndTranscribe` extracted, `autoCopy` added, hotkey subscribed, `toggleRecording`/`recordingMode` removed
-- [ ] `src/renderer/components/RecordingWidget.tsx` updated — PTT button handlers, clipboard icon button, auto-copy toggle, static hotkey hint; no PTT switch
-- [ ] `src/renderer/styles.css` updated — `btn-icon`, `widget-actions`, `switch-row`/`switch`/`switch-slider`, `hotkey-hint`
+- [ ] `src/renderer/hooks/useRecorder.ts` updated — `autoCopy` state (default `true`), auto-copy effect, `onHotkeyToggle` subscription; `toggleRecording` unchanged
+- [ ] `src/renderer/components/RecordingWidget.tsx` updated — clipboard icon button, auto-copy label+switch (right-aligned), hotkey hint; Record button unchanged
+- [ ] `src/renderer/styles.css` updated — `btn-icon`, `widget-actions`, `auto-copy-label`, `switch`/`switch-slider`, `hotkey-hint`
 - [ ] `npm run build` passes with zero errors
 - [ ] Manual testing confirms all acceptance criteria
 
@@ -612,16 +542,13 @@ Expected: NSIS installer built to `dist/`; `dist/win-unpacked/resources/` contai
 
 ## NOTES
 
-### Why uiohook-napi instead of Electron globalShortcut
-Electron's `globalShortcut` only fires on keydown — it has no keyup event. True push-to-talk (hold-to-record) via a global hotkey requires a native key hook. `uiohook-napi` ships prebuilt Windows binaries and is the standard solution for this in Electron apps.
+### Why globalShortcut instead of uiohook-napi
+The original plan used `uiohook-napi` to capture keyup events for push-to-talk (hold-to-record). Since the hotkey is now toggle-only (keydown fires → toggle recording state), Electron's built-in `globalShortcut` is sufficient and far simpler. No native module, no asar unpacking, no binary compatibility concerns.
 
-### No recordingMode state
-The previous plan had a UI toggle between "push-to-talk" and "toggle" modes. The user has simplified this: **PTT is always active**. There is no `recordingMode` state, no `setRecordingMode`, and no mode selector in the UI. Both the Record button and the global hotkey always use `startRecording` on press and `stopAndTranscribe` on release.
+### Auto-copy default ON
+`autoCopy` defaults to `true`. If the user wants this to persist across restarts, save to `localStorage` (same pattern as `theme` in `App.tsx`). Not required but trivial to add.
 
 ### Window Height
-Phase 4 adds an actions row (clipboard + auto-copy) and a hotkey hint below the Record button. If the layout feels cramped, increase `height` in `src/main/index.ts` `createWindow()` from `280` to `320`.
+Phase 4 adds an actions row and a hotkey hint below the Record button. If the layout feels cramped, increase `height` in `src/main/index.ts` `createWindow()` from `280` to `320`.
 
-### Persisting autoCopy preference
-`autoCopy` is in-memory only. To persist across restarts, save to `localStorage` (same pattern as `theme` in `App.tsx`). Not required by the PRD but trivial to add.
-
-**Confidence Score: 9/10** — Scope is well-defined. The only risk is `uiohook-napi` native module loading in the packaged build; if it fails, the hotkey silently doesn't work but the rest of the app is unaffected.
+**Confidence Score: 9/10** — All changes use stable, well-understood Electron and React patterns. No native modules. The main risk is `globalShortcut` conflicting with an existing system shortcut on the user's machine, which would cause silent registration failure — verify by checking `globalShortcut.register` return value and logging in dev.

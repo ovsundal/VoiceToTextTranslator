@@ -1,5 +1,6 @@
 {
-  "name": "VoiceToTextTranslator",
+  "name": "voice-to-text-transcriber",
+  "productName": "Voice-to-Text-Transcriber",
   "version": "1.0.0",
   "description": "Offline voice-to-text for Windows",
   "main": "out/main/index.js",

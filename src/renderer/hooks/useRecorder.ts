@@ -16,6 +16,7 @@ export function useRecorder() {
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'no'>('en')
   const [selectedModelSize, setSelectedModelSize] = useState<ModelSize>('base')
   const [downloadedModels, setDownloadedModels] = useState<ModelInfo[]>([])
+  const [autoCopy, setAutoCopy] = useState(true)
 
   const recorderRef = useRef<RecorderControls | null>(null)
 
@@ -57,6 +58,19 @@ export function useRecorder() {
     }
   }, [status, selectedLanguage, selectedModelSize])
 
+  useEffect(() => {
+    if (transcript && autoCopy) {
+      window.api.copyToClipboard(transcript)
+    }
+  }, [transcript, autoCopy])
+
+  useEffect(() => {
+    const cleanup = window.api.onHotkeyToggle(() => {
+      toggleRecording()
+    })
+    return cleanup
+  }, [toggleRecording])
+
   return {
     status,
     transcript,
@@ -67,5 +81,7 @@ export function useRecorder() {
     setSelectedModelSize,
     downloadedModels,
     toggleRecording,
+    autoCopy,
+    setAutoCopy,
   }
 }
