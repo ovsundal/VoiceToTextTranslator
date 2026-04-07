@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
+import ModelSetup from './components/ModelSetup'
 
 type Theme = 'dark' | 'light'
+type AppState = 'loading' | 'setup' | 'ready'
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('theme') as Theme) ?? 'dark'
   })
+  const [appState, setAppState] = useState<AppState>('loading')
 
   // Apply theme to DOM
   useEffect(() => {
@@ -21,16 +24,16 @@ export default function App() {
     return cleanup
   }, [])
 
+  // Check if a model is available
+  useEffect(() => {
+    window.api.listModels().then((models) => {
+      const hasModel = models.some((m) => m.downloaded)
+      setAppState(hasModel ? 'ready' : 'setup')
+    })
+  }, [])
+
   function toggleTheme() {
     setTheme(t => (t === 'dark' ? 'light' : 'dark'))
-  }
-
-  function handleMinimize() {
-    window.api.minimize()
-  }
-
-  function handleClose() {
-    window.api.close()
   }
 
   return (
@@ -41,16 +44,21 @@ export default function App() {
           <button onClick={toggleTheme} title="Toggle theme">
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
-          <button onClick={handleMinimize} title="Minimize">−</button>
-          <button className="btn-close" onClick={handleClose} title="Close">✕</button>
+          <button onClick={() => window.api.minimize()} title="Minimize">−</button>
+          <button className="btn-close" onClick={() => window.api.close()} title="Close">✕</button>
         </div>
       </div>
 
       <div className="app-content">
-        {/* Phase 2+: Model setup screen / main widget will replace this placeholder */}
-        <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-          Phase 1 scaffold — ready for feature implementation.
-        </p>
+        {appState === 'loading' && null}
+        {appState === 'setup' && (
+          <ModelSetup onComplete={() => setAppState('ready')} />
+        )}
+        {appState === 'ready' && (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+            Phase 2 complete — model ready. Recording UI coming in Phase 3.
+          </p>
+        )}
       </div>
     </>
   )

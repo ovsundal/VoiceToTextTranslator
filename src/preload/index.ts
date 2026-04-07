@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ModelInfo, ModelSize, DownloadProgress } from '../types/models'
 
 const api = {
   // Window controls
@@ -6,20 +7,24 @@ const api = {
   close: () => ipcRenderer.send('close'),
 
   // Theme
-  onThemeChanged: (cb: (theme: 'dark' | 'light') => void) => {
+  onThemeChanged: (cb: (theme: 'dark' | 'light') => void): (() => void) => {
     const handler = (_: Electron.IpcRendererEvent, theme: 'dark' | 'light') => cb(theme)
     ipcRenderer.on('theme-changed', handler)
-    return () => ipcRenderer.removeListener('theme-changed', handler)
+    return () => { ipcRenderer.removeListener('theme-changed', handler) }
+  },
+
+  // Model management
+  listModels: (): Promise<ModelInfo[]> => ipcRenderer.invoke('listModels'),
+  downloadModel: (size: ModelSize): void => ipcRenderer.send('downloadModel', size),
+  onDownloadProgress: (cb: (progress: DownloadProgress) => void): (() => void) => {
+    const handler = (_: Electron.IpcRendererEvent, progress: DownloadProgress) => cb(progress)
+    ipcRenderer.on('download-progress', handler)
+    return () => { ipcRenderer.removeListener('download-progress', handler) }
   },
 
   // TODO Phase 3: transcription
   // transcribe: (wavPath: string, language: 'en' | 'no'): Promise<string> =>
   //   ipcRenderer.invoke('transcribe', wavPath, language),
-
-  // TODO Phase 2: model management
-  // listModels: (): Promise<ModelInfo[]> => ipcRenderer.invoke('listModels'),
-  // downloadModel: (size: ModelSize): void => ipcRenderer.send('downloadModel', size),
-  // onDownloadProgress: (cb: (progress: DownloadProgress) => void) => { ... },
 
   // TODO Phase 4: hotkey
   // onHotkeyPressed: (cb: () => void) => { ... },
