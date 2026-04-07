@@ -1,0 +1,31 @@
+appId: com.voicetotext.translator
+productName: VoiceToText Translator
+copyright: Copyright © 2024
+
+directories:
+  output: dist-app
+  buildResources: build
+
+files:
+  - out/**/*
+  - node_modules/**/*
+  - package.json
+
+extraResources:
+  - from: resources/whisper
+    to: whisper
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
