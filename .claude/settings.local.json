@@ -9,7 +9,8 @@
       "Bash(touch resources/whisper/.gitkeep)",
       "Bash(rm src/index.ts)",
       "Bash(npm run:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }
