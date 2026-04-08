@@ -9,12 +9,14 @@ interface RecorderControls {
   stop: () => Promise<ArrayBuffer>
 }
 
-export function useRecorder() {
+export function useRecorder(initialModelSize?: ModelSize) {
   const [status, setStatus] = useState<RecorderStatus>('idle')
   const [transcript, setTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'no'>('en')
-  const [selectedModelSize, setSelectedModelSize] = useState<ModelSize>('base')
+  const [selectedModelSize, setSelectedModelSize] = useState<ModelSize>(
+    initialModelSize ?? (localStorage.getItem('selectedModelSize') as ModelSize) ?? 'base'
+  )
   const [downloadedModels, setDownloadedModels] = useState<ModelInfo[]>([])
   const [autoCopy, setAutoCopy] = useState(true)
 
@@ -25,9 +27,16 @@ export function useRecorder() {
       const available = models.filter((m) => m.downloaded)
       setDownloadedModels(available)
       if (available.length > 0) {
-        setSelectedModelSize(available[0].size)
+        const preferred = initialModelSize ?? (localStorage.getItem('selectedModelSize') as ModelSize)
+        const match = available.find(m => m.size === preferred)
+        setSelectedModelSize(match ? match.size : available[0].size)
       }
     })
+  }, [])
+
+  const updateModelSize = useCallback((size: ModelSize) => {
+    setSelectedModelSize(size)
+    localStorage.setItem('selectedModelSize', size)
   }, [])
 
   const toggleRecording = useCallback(async () => {
@@ -78,7 +87,7 @@ export function useRecorder() {
     selectedLanguage,
     setSelectedLanguage,
     selectedModelSize,
-    setSelectedModelSize,
+    updateModelSize,
     downloadedModels,
     toggleRecording,
     autoCopy,

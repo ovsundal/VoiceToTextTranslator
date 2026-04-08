@@ -3,18 +3,19 @@
   "productName": "Voice-to-Text-Transcriber",
   "version": "1.0.0",
   "description": "Offline voice-to-text for Windows",
+  "author": "ove.sundal",
   "main": "out/main/index.js",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package": "npm run build && electron-builder"
+    "package": "npm run build && electron-builder",
+    "package:dir": "npm run build && electron-builder --dir"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",
     "audiobuffer-to-wav": "^1.0.0",
     "axios": "^1.7.0",
-    "electron": "^33.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
@@ -23,6 +24,7 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^33.0.0",
     "electron-builder": "^25.1.0",
     "electron-vite": "^2.3.0",
     "typescript": "^5.5.3",

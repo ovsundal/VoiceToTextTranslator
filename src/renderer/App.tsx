@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import ModelSetup from './components/ModelSetup'
 import RecordingWidget from './components/RecordingWidget'
+import { SettingsPanel } from './components/SettingsPanel'
+import type { ModelSize } from '../types/models'
 
 type Theme = 'dark' | 'light'
 type AppState = 'loading' | 'setup' | 'ready'
@@ -10,6 +12,10 @@ export default function App() {
     return (localStorage.getItem('theme') as Theme) ?? 'dark'
   })
   const [appState, setAppState] = useState<AppState>('loading')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [activeModelSize, setActiveModelSize] = useState<ModelSize>(
+    () => (localStorage.getItem('selectedModelSize') as ModelSize) ?? 'base'
+  )
 
   // Apply theme to DOM
   useEffect(() => {
@@ -37,11 +43,22 @@ export default function App() {
     setTheme(t => (t === 'dark' ? 'light' : 'dark'))
   }
 
+  const handleModelChange = (size: ModelSize) => {
+    setActiveModelSize(size)
+    localStorage.setItem('selectedModelSize', size)
+  }
+
+  const handleAllModelsDeleted = () => {
+    setSettingsOpen(false)
+    setAppState('setup')
+  }
+
   return (
     <>
       <div className="titlebar">
         <span className="titlebar-title">Voice-to-Text-Transcriber</span>
         <div className="titlebar-controls">
+          <button onClick={() => setSettingsOpen(s => !s)} title="Settings">⚙</button>
           <button onClick={toggleTheme} title="Toggle theme">
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
@@ -51,11 +68,28 @@ export default function App() {
       </div>
 
       <div className="app-content">
-        {appState === 'loading' && null}
+        {appState === 'loading' && (
+          <div className="loading-spinner">
+            <span>Loading…</span>
+          </div>
+        )}
         {appState === 'setup' && (
           <ModelSetup onComplete={() => setAppState('ready')} />
         )}
-        {appState === 'ready' && <RecordingWidget />}
+        {appState === 'ready' && !settingsOpen && (
+          <RecordingWidget
+            activeModelSize={activeModelSize}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        )}
+        {appState === 'ready' && settingsOpen && (
+          <SettingsPanel
+            currentModelSize={activeModelSize}
+            onModelChange={handleModelChange}
+            onClose={() => setSettingsOpen(false)}
+            onAllModelsDeleted={handleAllModelsDeleted}
+          />
+        )}
       </div>
     </>
   )

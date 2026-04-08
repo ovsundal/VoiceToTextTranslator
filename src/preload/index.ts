@@ -16,6 +16,7 @@ const api = {
   // Model management
   listModels: (): Promise<ModelInfo[]> => ipcRenderer.invoke('listModels'),
   downloadModel: (size: ModelSize): void => ipcRenderer.send('downloadModel', size),
+  deleteModel: (size: ModelSize): void => ipcRenderer.send('deleteModel', size),
   onDownloadProgress: (cb: (progress: DownloadProgress) => void): (() => void) => {
     const handler = (_: Electron.IpcRendererEvent, progress: DownloadProgress) => cb(progress)
     ipcRenderer.on('download-progress', handler)

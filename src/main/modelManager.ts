@@ -84,3 +84,12 @@ export async function downloadModel(
     throw err
   }
 }
+
+export async function deleteModel(size: ModelSize): Promise<void> {
+  const dir = getModelsDir()
+  const fileName = MODEL_META[size].fileName
+  const filePath = join(dir, fileName)
+  const tmpPath = filePath + '.tmp'
+  try { unlinkSync(filePath) } catch {}
+  try { unlinkSync(tmpPath) } catch {}
+}

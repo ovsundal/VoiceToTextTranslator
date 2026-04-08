@@ -1,7 +1,13 @@
 import { useEffect } from 'react'
 import { useRecorder } from '../hooks/useRecorder'
+import type { ModelSize } from '../../types/models'
 
-export default function RecordingWidget() {
+interface RecordingWidgetProps {
+  activeModelSize: ModelSize
+  onOpenSettings: () => void
+}
+
+export default function RecordingWidget({ activeModelSize, onOpenSettings: _onOpenSettings }: RecordingWidgetProps) {
   const {
     status,
     transcript,
@@ -9,12 +15,12 @@ export default function RecordingWidget() {
     selectedLanguage,
     setSelectedLanguage,
     selectedModelSize,
-    setSelectedModelSize,
+    updateModelSize,
     downloadedModels,
     toggleRecording,
     autoCopy,
     setAutoCopy,
-  } = useRecorder()
+  } = useRecorder(activeModelSize)
 
   const isRecording = status === 'recording'
 
@@ -45,7 +51,7 @@ export default function RecordingWidget() {
 
         <select
           value={selectedModelSize}
-          onChange={(e) => setSelectedModelSize(e.target.value as typeof selectedModelSize)}
+          onChange={(e) => updateModelSize(e.target.value as typeof selectedModelSize)}
           disabled={status !== 'idle' && status !== 'error'}
         >
           {downloadedModels.map((m) => (

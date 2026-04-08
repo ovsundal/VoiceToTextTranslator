@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, clipboard, nativeImage } from 'electron'
-import { listModels, downloadModel } from './modelManager'
+import { listModels, downloadModel, deleteModel } from './modelManager'
 import { transcribe } from './transcriber'
 import type { ModelSize } from '../types/models'
 
@@ -18,6 +18,10 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     downloadModel(size as ModelSize, (progress) => {
       win.webContents.send('download-progress', progress)
     }).catch(console.error)
+  })
+
+  ipcMain.on('deleteModel', async (_event, size: ModelSize) => {
+    await deleteModel(size)
   })
 
   // Transcription
