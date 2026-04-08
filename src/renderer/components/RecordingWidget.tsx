@@ -7,6 +7,12 @@ interface RecordingWidgetProps {
   onOpenSettings: () => void
 }
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+  const s = (seconds % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+}
+
 export default function RecordingWidget({ activeModelSize, onOpenSettings: _onOpenSettings }: RecordingWidgetProps) {
   const {
     status,
@@ -20,6 +26,15 @@ export default function RecordingWidget({ activeModelSize, onOpenSettings: _onOp
     toggleRecording,
     autoCopy,
     setAutoCopy,
+    autoPaste,
+    setAutoPaste,
+    recordingSeconds,
+    history,
+    displayedTranscript,
+    canGoBack,
+    canGoFwd,
+    goBack,
+    goFwd,
   } = useRecorder(activeModelSize)
 
   const isRecording = status === 'recording'
@@ -27,9 +42,11 @@ export default function RecordingWidget({ activeModelSize, onOpenSettings: _onOp
   useEffect(() => {
     document.documentElement.dataset.recording = String(isRecording)
     window.api.setOverlay(isRecording)
+    window.api.setAlwaysOnTop(isRecording)
     return () => {
       document.documentElement.dataset.recording = 'false'
       window.api.setOverlay(false)
+      window.api.setAlwaysOnTop(false)
     }
   }, [isRecording])
 
@@ -60,10 +77,32 @@ export default function RecordingWidget({ activeModelSize, onOpenSettings: _onOp
         </select>
       </div>
 
+      {history.length > 0 && (
+        <div className="history-nav">
+          <button
+            className="btn-icon"
+            onClick={goBack}
+            disabled={!canGoBack}
+            title="Previous transcription"
+          >‹</button>
+          <span className="history-counter">
+            {(canGoBack || canGoFwd)
+              ? `${history.indexOf(displayedTranscript) + 1} / ${history.length}`
+              : `1 / 1`}
+          </span>
+          <button
+            className="btn-icon"
+            onClick={goFwd}
+            disabled={!canGoFwd}
+            title="Next transcription"
+          >›</button>
+        </div>
+      )}
+
       <textarea
         className="widget-transcript"
         readOnly
-        value={transcript}
+        value={displayedTranscript}
         placeholder="Transcription will appear here..."
       />
 
@@ -73,7 +112,11 @@ export default function RecordingWidget({ activeModelSize, onOpenSettings: _onOp
         disabled={status === 'transcribing'}
         style={isRecording ? { background: 'var(--accent-danger)' } : undefined}
       >
-        {status === 'transcribing' ? '⏳ Transcribing...' : isRecording ? '⏹ Stop' : '⏺ Record'}
+        {status === 'transcribing'
+          ? '⏳ Transcribing...'
+          : isRecording
+            ? `⏹ Stop  ${formatDuration(recordingSeconds)}`
+            : '⏺ Record'}
       </button>
 
       <div className="widget-actions">
@@ -89,17 +132,31 @@ export default function RecordingWidget({ activeModelSize, onOpenSettings: _onOp
           </svg>
         </button>
 
-        <label className="auto-copy-label">
-          <span>Auto-copy</span>
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={autoCopy}
-              onChange={(e) => setAutoCopy(e.target.checked)}
-            />
-            <span className="switch-slider" />
+        <div className="widget-toggles">
+          <label className="auto-copy-label">
+            <span>Auto-copy</span>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={autoCopy}
+                onChange={(e) => setAutoCopy(e.target.checked)}
+              />
+              <span className="switch-slider" />
+            </label>
           </label>
-        </label>
+
+          <label className="auto-copy-label">
+            <span>Auto-paste</span>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={autoPaste}
+                onChange={(e) => setAutoPaste(e.target.checked)}
+              />
+              <span className="switch-slider" />
+            </label>
+          </label>
+        </div>
       </div>
 
       <p className="hotkey-hint">Press Ctrl+Shift+Space to toggle recording</p>

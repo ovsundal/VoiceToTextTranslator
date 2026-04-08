@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow, clipboard, nativeImage } from 'electron'
+import { exec } from 'child_process'
 import { listModels, downloadModel, deleteModel } from './modelManager'
 import { transcribe } from './transcriber'
 import type { ModelSize } from '../types/models'
@@ -10,6 +11,10 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   // Titlebar controls
   ipcMain.on('minimize', () => win.minimize())
   ipcMain.on('close', () => win.close())
+
+  ipcMain.on('set-always-on-top', (_, on: boolean) => {
+    win.setAlwaysOnTop(on)
+  })
 
   // Model management
   ipcMain.handle('listModels', () => listModels())
@@ -34,6 +39,15 @@ export function registerIpcHandlers(win: BrowserWindow): void {
 
   // Clipboard
   ipcMain.on('copyToClipboard', (_, text: string) => { clipboard.writeText(text) })
+
+  ipcMain.handle('auto-paste', () => {
+    return new Promise<void>((resolve, reject) => {
+      exec(
+        'powershell -WindowStyle Hidden -NonInteractive -Command "$wsh = New-Object -ComObject WScript.Shell; $wsh.SendKeys(\'^v\')"',
+        (err) => { if (err) reject(err); else resolve() }
+      )
+    })
+  })
 
   // Taskbar overlay
   ipcMain.on('set-overlay', (_, isRecording: boolean) => {

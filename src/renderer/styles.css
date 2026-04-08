@@ -247,6 +247,30 @@ html, body {
   background: var(--thumb-hover);
 }
 
+/* ── Recording visual indicators ───────────────────────────── */
+@keyframes recordingPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(243, 139, 168, 0.7); }
+  70%  { box-shadow: 0 0 0 9px rgba(243, 139, 168, 0);   }
+  100% { box-shadow: 0 0 0 0   rgba(243, 139, 168, 0);   }
+}
+
+:root[data-recording="true"] .btn-primary {
+  animation: recordingPulse 1.4s ease-out infinite;
+}
+
+@keyframes recordingBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+:root[data-recording="true"] .titlebar-title::after {
+  content: ' ⏺';
+  color: var(--accent-danger);
+  font-size: 9px;
+  animation: recordingBlink 1s step-start infinite;
+  vertical-align: middle;
+}
+
 /* Recording Widget */
 .widget-toolbar {
   display: flex;
@@ -553,4 +577,28 @@ html, body {
   flex: 1;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* ── History navigation ─────────────────────────────────────── */
+.history-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-bottom: 2px;
+}
+
+.history-counter {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 36px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ── Widget action row with two toggles ─────────────────────── */
+.widget-toggles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }

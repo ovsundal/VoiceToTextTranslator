@@ -36,6 +36,8 @@ const api = {
 
   // Clipboard
   copyToClipboard: (text: string): void => ipcRenderer.send('copyToClipboard', text),
+  setAlwaysOnTop: (on: boolean): void => ipcRenderer.send('set-always-on-top', on),
+  autoPaste: (): Promise<void> => ipcRenderer.invoke('auto-paste'),
 
   // Taskbar overlay
   setOverlay: (isRecording: boolean): void => ipcRenderer.send('set-overlay', isRecording),

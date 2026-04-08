@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { recordAudio } from '../recorder'
+import { playChime } from '../chime'
 import type { ModelSize, ModelInfo } from '../../types/models'
 
 type RecorderStatus = 'idle' | 'recording' | 'transcribing' | 'error'
@@ -19,8 +20,21 @@ export function useRecorder(initialModelSize?: ModelSize) {
   )
   const [downloadedModels, setDownloadedModels] = useState<ModelInfo[]>([])
   const [autoCopy, setAutoCopy] = useState(true)
+  const [autoPaste, setAutoPasteState] = useState(() => localStorage.getItem('autoPaste') === 'true')
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // History ring buffer
+  const MAX_HISTORY = 10
+  const [history, setHistory] = useState<string[]>([])
+  const [historyIdx, setHistoryIdx] = useState(0)
 
   const recorderRef = useRef<RecorderControls | null>(null)
+
+  const setAutoPaste = useCallback((val: boolean) => {
+    setAutoPasteState(val)
+    localStorage.setItem('autoPaste', String(val))
+  }, [])
 
   useEffect(() => {
     window.api.listModels().then((models) => {
@@ -46,6 +60,9 @@ export function useRecorder(initialModelSize?: ModelSize) {
         const controls = await recordAudio()
         recorderRef.current = controls
         controls.start()
+        playChime('start')
+        setRecordingSeconds(0)
+        timerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000)
         setStatus('recording')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start recording')
@@ -54,13 +71,24 @@ export function useRecorder(initialModelSize?: ModelSize) {
     } else if (status === 'recording') {
       if (!recorderRef.current) return
       setStatus('transcribing')
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      playChime('stop')
       try {
         const wavBuffer = await recorderRef.current.stop()
         recorderRef.current = null
         const text = await window.api.transcribe(wavBuffer, selectedLanguage, selectedModelSize)
         setTranscript(text)
+        setHistory(prev => {
+          const next = [...prev, text]
+          return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next
+        })
+        setHistoryIdx(-1)
         setStatus('idle')
       } catch (err) {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
         setError(err instanceof Error ? err.message : 'Transcription failed')
         setStatus('error')
       }
@@ -74,11 +102,39 @@ export function useRecorder(initialModelSize?: ModelSize) {
   }, [transcript, autoCopy])
 
   useEffect(() => {
+    if (history.length > 0 && autoPaste) {
+      window.api.autoPaste().catch(console.error)
+    }
+  }, [history, autoPaste])
+
+  useEffect(() => {
     const cleanup = window.api.onHotkeyToggle(() => {
       toggleRecording()
     })
     return cleanup
   }, [toggleRecording])
+
+  // Resolve the actual index when historyIdx is -1 (latest)
+  const resolvedIdx = historyIdx === -1 ? history.length - 1 : historyIdx
+  const displayedTranscript = history[resolvedIdx] ?? ''
+
+  const canGoBack = resolvedIdx > 0
+  const canGoFwd = resolvedIdx < history.length - 1
+
+  const goBack = useCallback(() => {
+    setHistoryIdx(prev => {
+      const cur = prev === -1 ? history.length - 1 : prev
+      return Math.max(0, cur - 1)
+    })
+  }, [history.length])
+
+  const goFwd = useCallback(() => {
+    setHistoryIdx(prev => {
+      const cur = prev === -1 ? history.length - 1 : prev
+      const next = cur + 1
+      return next >= history.length ? -1 : next
+    })
+  }, [history.length])
 
   return {
     status,
@@ -92,5 +148,14 @@ export function useRecorder(initialModelSize?: ModelSize) {
     toggleRecording,
     autoCopy,
     setAutoCopy,
+    autoPaste,
+    setAutoPaste,
+    recordingSeconds,
+    history,
+    displayedTranscript,
+    canGoBack,
+    canGoFwd,
+    goBack,
+    goFwd,
   }
 }
